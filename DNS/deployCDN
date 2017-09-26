@@ -1,0 +1,73 @@
+#!/bin/bash
+
+# process options
+while getopts p:o:n:u:i: option
+do
+	case "${option}"
+    in
+		p) PORT=${OPTARG};;
+		o) ORIGIN=${OPTARG};;
+		n) NAME=${OPTARG};;
+		u) USERNAME=${OPTARG};;
+		i) KEYFILE=${OPTARG};;
+	esac
+done
+
+# build array of replca servers
+REPLICAS=("ec2-54-210-1-206.compute-1.amazonaws.com" 
+"ec2-54-67-25-76.us-west-1.compute.amazonaws.com" 
+"ec2-35-161-203-105.us-west-2.compute.amazonaws.com" 
+"ec2-52-213-13-179.eu-west-1.compute.amazonaws.com" 
+"ec2-52-196-161-198.ap-northeast-1.compute.amazonaws.com" 
+"ec2-54-255-148-115.ap-southeast-1.compute.amazonaws.com" 
+"ec2-13-54-30-86.ap-southeast-2.compute.amazonaws.com" 
+"ec2-52-67-177-90.sa-east-1.compute.amazonaws.com" 
+"ec2-35-156-54-135.eu-central-1.compute.amazonaws.com")
+
+PWD=$(pwd)
+
+#=========== COMPILE THE EC2-COMPATIBLE EXE
+#   scp the executable onto the remote EC2 instance
+scp -i $KEYFILE "httpserver.cpp" $USERNAME@ec2-54-210-1-206.compute-1.amazonaws.com:~
+scp -i $KEYFILE "makefile" $USERNAME@ec2-54-210-1-206.compute-1.amazonaws.com:~/
+
+ssh -i $KEYFILE $USERNAME@ec2-54-210-1-206.compute-1.amazonaws.com bash -c "'
+
+make clean
+
+make httpserver
+
+exit
+
+
+'"
+
+# move the ec2-compatible exe back onto the local machine
+scp -i $KEYFILE $USERNAME@ec2-54-210-1-206.compute-1.amazonaws.com:~/httpserver .
+
+#=========== DEPLOY HTTP SERVER ONTO REPLICAS
+
+# for each replica server
+for i in "${REPLICAS[@]}"
+do
+   : 
+#   move the ec2-compatible exe from local to remote ec2
+    scp -i $KEYFILE "httpserver" $USERNAME@$i:~/
+
+done
+
+#=========== DEPLOY DNS ONTO cs5700cdnproject.ccs.neu.edu
+
+#scp the executable onto the DNS server host
+scp -i $KEYFILE "dnsserver.cpp" $USERNAME@cs5700cdnproject.ccs.neu.edu:~/
+scp -i $KEYFILE "makefile" $USERNAME@cs5700cdnproject.ccs.neu.edu:~/
+
+#   ssh into the remote machine and compile the code
+ssh -i $KEYFILE $USERNAME@cs5700cdnproject.ccs.neu.edu bash -c "'
+
+make clean
+
+make dnsserver
+
+exit
+'"
